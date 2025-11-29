@@ -221,16 +221,7 @@ const Footer = () => {
         <div className={footerStyles.bottomBar}>
           {/* Center: Designed by (plain text) + Hexagon Digital Services (link only) */}
           <div className={footerStyles.designedBy}>
-            <span className={footerStyles.designedByText}>Copyright 2025</span>
-            <a
-              href="https://hexagondigitalservices.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className={footerStyles.designedByLink}
-              aria-label="Hexagon Digital Services"
-            >
-            @ All Rights Reserved.
-            </a>
+            <span className={footerStyles.designedByText}>Copyright 2025 @ All Rights Reserved.</span>
           </div>
           
           <div className={footerStyles.policyLinks}>

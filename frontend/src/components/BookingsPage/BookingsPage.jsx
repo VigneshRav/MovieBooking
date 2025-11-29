@@ -7,7 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { bookingsPageStyles, formatTime, formatDuration } from "../../assets/dummyStyles";
 
 // API base
-const API_BASE = "http://localhost:5000";
+const API_BASE = "https://moviebooking-backend-vo9q.onrender.com";
 
 function getStoredToken() {
   return (

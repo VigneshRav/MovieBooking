@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { styles5, customStyles } from "../../assets/dummyStyles";
 
-const API_BASE = "http://localhost:5000";
+const API_BASE = "https://moviebooking-backend-vo9q.onrender.com";
 
 function getImageUrl(maybe) {
   // Convert filename, uploads/filename, or partial to a full uploads URL.
