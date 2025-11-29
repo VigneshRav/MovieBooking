@@ -4,7 +4,7 @@ import Movie from "../models/movieModel.js";
 import path from "path";
 import fs from "fs";
 
-const API_BASE = "https://moviebooking-backend-vo9q.onrender.com";
+const API_BASE = "https://movie-booking-admin.netlify.app";
 
 /* ---------------------- small helpers ---------------------- */
 const getUploadUrl = (val) => {
