@@ -61,7 +61,7 @@ export const registerUser = async (req, res) => {
       phone: phone, // storing as provided (kept same behavior)
       birthDate: parsedBirth,
       password: hashedPassword,
-      role: role|| "User",
+      role: role?.toLowerCase() === "admin" ? "admin" : "user",
     });
 
     const token = mkToken({ id: newUser._id });
@@ -113,7 +113,7 @@ export async function login(req, res) {
       success: true,
       message: "Login successful!",
       token,
-      user: { id: user._id.toString(), name: user.name, email: user.email }
+      user: { id: user._id.toString(), name: user.name, email: user.email, role: user.role }
     });
   } catch (err) {
     console.error("Login error:", err);
