@@ -50,7 +50,7 @@ import {
   getMovies,
   getMovieById,
   deleteMovie,
-} from "../controllers/movieController.js";
+} from "../controllers/moviesController.js";
 
 const movieRouter = express.Router();
 
