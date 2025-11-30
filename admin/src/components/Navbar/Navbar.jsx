@@ -339,7 +339,7 @@ export default function Navbar() {
               <Film className={styles4.logoIconInner} />
             </div>
             <span className={styles4.logoText}>
-              BookMyScreen
+              BookMyScreen (Admin Panel)
             </span>
           </div>
 
