@@ -58,8 +58,8 @@ export default function AddMoviePage() {
   const [durationMinutes, setDurationMinutes] = useState(duration % 60);
 
   // auditorium state & available options
-  const availableAuditoriums = ["Audi 1", "Audi 2", "Audi 3"];
-  const [auditorium, setAuditorium] = useState("Audi 1");
+  const availableTheaters = ["Sathyam Cinemas", "AGS Cinemas", "PVR Cinemas", "Abirami Multiplex", "VR Talkies", "Vetri Cinemas", "Broadway Cinemas"];
+  const [auditorium, setAuditorium] = useState("Sathyam Cinemas");
   const [customAuditorium, setCustomAuditorium] = useState("");
 
   // uploading indicator
@@ -767,13 +767,13 @@ export default function AddMoviePage() {
 
                       {/* AUDITORIUM SELECTOR */}
                       <div>
-                        <label className={addMoviePageStyles.label}>Auditorium</label>
+                        <label className={addMoviePageStyles.label}>Theaters</label>
                         <select
                           value={auditorium}
                           onChange={(e) => setAuditorium(e.target.value)}
                           className={addMoviePageStyles.select}
                         >
-                          {availableAuditoriums.map((a) => (
+                          {availableTheaters.map((a) => (
                             <option value={a} key={a}>
                               {a}
                             </option>
