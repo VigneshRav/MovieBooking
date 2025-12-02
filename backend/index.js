@@ -38,6 +38,7 @@ import "dotenv/config";
 import express from "express";
 import { connectDB } from "./config/db.js";
 import path from "path";
+import { fileURLToPath } from "url";
 
 import movieRouter from "./routes/movieRouter.js";
 import userRouter from "./routes/userRouter.js";
@@ -52,8 +53,12 @@ app.use(express.urlencoded({ extended: true }));
 
 connectDB();
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // STATIC FOR IMAGES
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+// app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 app.use("/api/auth", userRouter);
 app.use("/api/movies", movieRouter);
