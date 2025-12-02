@@ -220,7 +220,8 @@ import { moviesPageStyles } from "../../assets/dummyStyles";
 
 const API_BASE = "https://moviebooking-backend-vo9q.onrender.com";
 const COLLAPSE_COUNT = 12;
-const PLACEHOLDER = "https://via.placeholder.com/400x600?text=No+Poster";
+const PLACEHOLDER = "https://placehold.co/400x600?text=No+Poster";
+
 
 const getUploadUrl = (maybe) => {
   if (!maybe) return null;
