@@ -1,10 +1,19 @@
-// controllers/movieController.js
+// moviesController.js
 import mongoose from "mongoose";
 import Movie from "../models/movieModel.js";
 import path from "path";
 import fs from "fs";
+import { v2 as cloudinary } from "cloudinary";
 
-const API_BASE = "https://moviebooking-backend-vo9q.onrender.com";
+const API_BASE = process.env.API_BASE || "https://moviebooking-backend-vo9q.onrender.com";
+
+/* ---------- Cloudinary config ---------- */
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true,
+});
 
 /* ---------------------- small helpers ---------------------- */
 const getUploadUrl = (val) => {
@@ -16,14 +25,49 @@ const getUploadUrl = (val) => {
 };
 
 const extractFilenameFromUrl = (u) => {
+  // Only handle local /uploads/ filenames here (same as before)
   if (!u || typeof u !== "string") return null;
   const parts = u.split("/uploads/");
   if (parts[1]) return parts[1];
   if (u.startsWith("uploads/")) return u.replace(/^uploads\//, "");
+  // fallback: if u looks like a plain filename, return it
   return /^[^\/]+\.[a-zA-Z0-9]+$/.test(u) ? u : null;
 };
 
+const isCloudinaryUrl = (u) => {
+  return !!(u && typeof u === "string" && u.includes("res.cloudinary.com"));
+};
+
+const extractCloudinaryPublicIdFromUrl = (url) => {
+  // Cloudinary url pattern: https://res.cloudinary.com/<cloud>/image/upload/v<ver>/<public_id>.<ext>
+  // We'll extract the portion after '/upload/' and strip version prefix v12345/ and extension.
+  if (!url || typeof url !== "string") return null;
+  const idx = url.indexOf("/upload/");
+  if (idx === -1) return null;
+  let after = url.substring(idx + "/upload/".length);
+  // remove querystring if any
+  after = after.split("?")[0];
+  // remove file extension
+  const lastDot = after.lastIndexOf(".");
+  if (lastDot !== -1) after = after.substring(0, lastDot);
+  // remove leading version like v123456/
+  after = after.replace(/^v\d+\//, "");
+  return decodeURIComponent(after);
+};
+
 const tryUnlinkUploadUrl = (urlOrFilename) => {
+  // If it's a Cloudinary URL -> delete via cloudinary API
+  if (!urlOrFilename) return;
+  if (isCloudinaryUrl(urlOrFilename)) {
+    const publicId = extractCloudinaryPublicIdFromUrl(urlOrFilename);
+    if (!publicId) return;
+    cloudinary.uploader.destroy(publicId, (err, res) => {
+      if (err) console.warn("Cloudinary destroy failed for", publicId, err.message || err);
+    });
+    return;
+  }
+
+  // else handle local uploads folder removal
   const fn = extractFilenameFromUrl(urlOrFilename);
   if (!fn) return;
   const filepath = path.join(process.cwd(), "uploads", fn);
@@ -41,6 +85,8 @@ const safeParseJSON = (v) => {
 const normalizeLatestPersonFilename = (value) => {
   if (!value) return null;
   if (typeof value === "string") {
+    // if it's a full URL (cloudinary or http), return as is.
+    if (/^(https?:\/\/)/.test(value)) return value;
     const fn = extractFilenameFromUrl(value);
     return fn || value;
   }
@@ -107,15 +153,53 @@ const normalizeItemForOutput = (it = {}) => {
   return obj;
 };
 
+/* ---------- Cloudinary uploader helper ---------- */
+const uploadBufferToCloudinary = (buffer, originalname = "file", folder = "movies") => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { folder },
+      (error, result) => {
+        if (error) return reject(error);
+        return resolve(result);
+      }
+    );
+    uploadStream.end(buffer);
+  });
+};
+
 /* ---------------------- controllers ---------------------- */
 export async function createMovie(req, res) {
   try {
     const body = req.body || {};
 
-    // upload-aware fields (store urls for poster/trailer/video; for lt.thumbnail we keep filename/cleaned value)
-    const posterUrl = req.files?.poster?.[0]?.filename ? getUploadUrl(req.files.poster[0].filename) : (body.poster || null);
-    const trailerUrl = req.files?.trailerUrl?.[0]?.filename ? getUploadUrl(req.files.trailerUrl[0].filename) : (body.trailerUrl || null);
-    const videoUrl = req.files?.videoUrl?.[0]?.filename ? getUploadUrl(req.files.videoUrl[0].filename) : (body.videoUrl || null);
+    // Handle poster/trailer/video uploads (upload to cloudinary if file present)
+    let posterUrl = null;
+    let trailerUrl = null;
+    let videoUrl = null;
+
+    if (req.files?.poster?.[0]) {
+      const file = req.files.poster[0];
+      const uploaded = await uploadBufferToCloudinary(file.buffer, file.originalname, "movies/posters");
+      posterUrl = uploaded?.secure_url || null;
+    } else if (body.poster) {
+      posterUrl = body.poster;
+    }
+
+    if (req.files?.trailerUrl?.[0]) {
+      const file = req.files.trailerUrl[0];
+      const uploaded = await uploadBufferToCloudinary(file.buffer, file.originalname, "movies/trailers");
+      trailerUrl = uploaded?.secure_url || null;
+    } else if (body.trailerUrl) {
+      trailerUrl = body.trailerUrl;
+    }
+
+    if (req.files?.videoUrl?.[0]) {
+      const file = req.files.videoUrl[0];
+      const uploaded = await uploadBufferToCloudinary(file.buffer, file.originalname, "movies/videos");
+      videoUrl = uploaded?.secure_url || null;
+    } else if (body.videoUrl) {
+      videoUrl = body.videoUrl;
+    }
 
     const categories = safeParseJSON(body.categories) || (body.categories ? String(body.categories).split(",").map(s => s.trim()).filter(Boolean) : []);
     const slots = safeParseJSON(body.slots) || [];
@@ -126,24 +210,32 @@ export async function createMovie(req, res) {
     const producers = safeParseJSON(body.producers) || [];
 
     // generic attacher for arrays of uploaded files -> target array entries
-    const attachFiles = (filesArrName, targetArr, toFilename = (f) => getUploadUrl(f)) => {
+    const attachFiles = async (filesArrName, targetArr, folder = "movies/people") => {
       if (!req.files?.[filesArrName]) return;
-      req.files[filesArrName].forEach((file, idx) => {
-        if (targetArr[idx]) targetArr[idx].file = toFilename(file.filename);
-        else targetArr[idx] = { name: "", file: toFilename(file.filename) };
-      });
+      for (let idx = 0; idx < req.files[filesArrName].length; idx++) {
+        const file = req.files[filesArrName][idx];
+        const uploaded = await uploadBufferToCloudinary(file.buffer, file.originalname, folder);
+        const url = uploaded?.secure_url || null;
+        if (targetArr[idx]) targetArr[idx].file = url;
+        else targetArr[idx] = { name: "", file: url };
+      }
     };
-    attachFiles("castFiles", cast);
-    attachFiles("directorFiles", directors);
-    attachFiles("producerFiles", producers);
+
+    await attachFiles("castFiles", cast, "movies/people/cast");
+    await attachFiles("directorFiles", directors, "movies/people/directors");
+    await attachFiles("producerFiles", producers, "movies/people/producers");
 
     // latest trailer
     const latestTrailerBody = safeParseJSON(body.latestTrailer) || {};
-    if (req.files?.ltThumbnail?.[0]?.filename) latestTrailerBody.thumbnail = req.files.ltThumbnail[0].filename;
-    else if (body.ltThumbnail) {
+    if (req.files?.ltThumbnail?.[0]) {
+      const file = req.files.ltThumbnail[0];
+      const uploaded = await uploadBufferToCloudinary(file.buffer, file.originalname, "movies/latest_trailers");
+      latestTrailerBody.thumbnail = uploaded?.secure_url || null;
+    } else if (body.ltThumbnail) {
       const fn = extractFilenameFromUrl(body.ltThumbnail);
       latestTrailerBody.thumbnail = fn ? fn : body.ltThumbnail;
     }
+
     if (body.ltVideoUrl) latestTrailerBody.videoId = body.ltVideoUrl;
     if (body.ltUrl) latestTrailerBody.url = body.ltUrl;
     if (body.ltTitle) latestTrailerBody.title = body.ltTitle;
@@ -152,18 +244,21 @@ export async function createMovie(req, res) {
     latestTrailerBody.producers = latestTrailerBody.producers || [];
     latestTrailerBody.singers = latestTrailerBody.singers || [];
 
-    // attach files for latestTrailer people's file fields (we store raw filename here like original)
-    const attachLtFiles = (fieldName, arrName) => {
+    // attach files for latestTrailer people's file fields (we store cloudinary URL here)
+    const attachLtFiles = async (fieldName, arrName, folder) => {
       if (!req.files?.[fieldName]) return;
-      req.files[fieldName].forEach((file, idx) => {
-        const filename = file.filename;
-        if (latestTrailerBody[arrName][idx]) latestTrailerBody[arrName][idx].file = filename;
-        else latestTrailerBody[arrName][idx] = { name: "", file: filename };
-      });
+      for (let idx = 0; idx < req.files[fieldName].length; idx++) {
+        const file = req.files[fieldName][idx];
+        const uploaded = await uploadBufferToCloudinary(file.buffer, file.originalname, folder);
+        const url = uploaded?.secure_url || null;
+        if (latestTrailerBody[arrName][idx]) latestTrailerBody[arrName][idx].file = url;
+        else latestTrailerBody[arrName][idx] = { name: "", file: url };
+      }
     };
-    attachLtFiles("ltDirectorFiles", "directors");
-    attachLtFiles("ltProducerFiles", "producers");
-    attachLtFiles("ltSingerFiles", "singers");
+
+    await attachLtFiles("ltDirectorFiles", "directors", "movies/latest_trailers/people/directors");
+    await attachLtFiles("ltProducerFiles", "producers", "movies/latest_trailers/people/producers");
+    await attachLtFiles("ltSingerFiles", "singers", "movies/latest_trailers/people/singers");
 
     // normalize latestTrailer people to keep consistent stored value (file = cleaned filename or null)
     latestTrailerBody.directors = buildLatestTrailerPeople(latestTrailerBody.directors);
@@ -268,7 +363,7 @@ export async function deleteMovie(req, res) {
     const m = await Movie.findById(id);
     if (!m) return res.status(404).json({ success: false, message: "Movie not found" });
 
-    // unlink main assets
+    // unlink main assets (poster & latest trailer thumbnail) - handles both local and cloudinary urls
     if (m.poster) tryUnlinkUploadUrl(m.poster);
     if (m.latestTrailer && m.latestTrailer.thumbnail) tryUnlinkUploadUrl(m.latestTrailer.thumbnail);
 
@@ -291,281 +386,3 @@ export async function deleteMovie(req, res) {
 }
 
 export default { createMovie, getMovies, getMovieById, deleteMovie };
-
-
-// controllers/movieController.js
-// import mongoose from "mongoose";
-// import Movie from "../models/movieModel.js";
-// import path from "path";
-// import fs from "fs";
-
-// /* ------------------------------------------------------------------
-//    AUTO-DETECT BASE URL  
-//    LOCAL → http://localhost:5000
-//    RENDER → https://your-app.onrender.com
-// -------------------------------------------------------------------*/
-// const API_BASE =
-//   process.env.BASE_URL ||
-//   process.env.RENDER_EXTERNAL_URL ||
-//   `http://localhost:${process.env.PORT || 5000}`;
-
-// /* ---------------------- small helpers ---------------------- */
-// const getUploadUrl = (val) => {
-//   if (!val) return null;
-//   if (typeof val === "string" && /^(https?:\/\/)/.test(val)) return val;
-//   const cleaned = String(val).replace(/^uploads\//, "");
-//   return `${API_BASE}/uploads/${cleaned}`;
-// };
-
-// const extractFilenameFromUrl = (u) => {
-//   if (!u || typeof u !== "string") return null;
-//   if (u.includes("/uploads/")) return u.split("/uploads/")[1];
-//   if (u.startsWith("uploads/")) return u.replace("uploads/", "");
-//   if (/^[^\/]+\.[a-zA-Z0-9]+$/.test(u)) return u;
-//   return null;
-// };
-
-// const tryUnlinkUploadUrl = (urlOrFilename) => {
-//   const fn = extractFilenameFromUrl(urlOrFilename);
-//   if (!fn) return;
-//   const filepath = path.join(process.cwd(), "uploads", fn);
-//   fs.unlink(filepath, (err) => {
-//     if (err) console.warn("Failed to unlink file:", err?.message);
-//   });
-// };
-
-// const safeParseJSON = (v) => {
-//   if (!v) return null;
-//   if (typeof v === "object") return v;
-//   try {
-//     return JSON.parse(v);
-//   } catch {
-//     return null;
-//   }
-// };
-
-// const normalizeLatestPersonFilename = (value) => {
-//   if (!value) return null;
-//   if (typeof value === "string") return extractFilenameFromUrl(value) || value;
-
-//   if (typeof value === "object") {
-//     const candidate =
-//       value.filename || value.path || value.url || value.image || value.file;
-//     return candidate ? normalizeLatestPersonFilename(candidate) : null;
-//   }
-
-//   return null;
-// };
-
-// const personToPreview = (p) => {
-//   if (!p) return { name: "", role: "", preview: null };
-//   return {
-//     name: p.name || "",
-//     role: p.role || "",
-//     preview: p.file ? getUploadUrl(p.file) : null,
-//   };
-// };
-
-// /* ---------------------- shared transformers ---------------------- */
-// const buildLatestTrailerPeople = (arr = []) =>
-//   (arr || []).map((p) => ({
-//     name: p?.name || "",
-//     role: p?.role || "",
-//     file: normalizeLatestPersonFilename(
-//       p?.file || p?.preview || p?.url || p?.image
-//     ),
-//   }));
-
-// const enrichLatestTrailerForOutput = (lt = {}) => {
-//   const out = { ...lt };
-//   if (out.thumbnail) out.thumbnail = getUploadUrl(out.thumbnail);
-
-//   const fixPeople = (p) => ({
-//     name: p?.name || "",
-//     role: p?.role || "",
-//     preview: p.file ? getUploadUrl(p.file) : null,
-//   });
-
-//   out.directors = (out.directors || []).map(fixPeople);
-//   out.producers = (out.producers || []).map(fixPeople);
-//   out.singers = (out.singers || []).map(fixPeople);
-
-//   return out;
-// };
-
-// const normalizeItemForOutput = (it = {}) => {
-//   const out = { ...it };
-
-//   out.thumbnail = it.latestTrailer?.thumbnail
-//     ? getUploadUrl(it.latestTrailer.thumbnail)
-//     : it.poster
-//     ? getUploadUrl(it.poster)
-//     : null;
-
-//   out.trailerUrl =
-//     it.trailerUrl || it.latestTrailer?.url || it.latestTrailer?.videoId || null;
-
-//   out.cast = (it.cast || []).map(personToPreview);
-//   out.directors = (it.directors || []).map(personToPreview);
-//   out.producers = (it.producers || []).map(personToPreview);
-
-//   if (it.latestTrailer) out.latestTrailer = enrichLatestTrailerForOutput(it.latestTrailer);
-
-//   return out;
-// };
-
-// /* ---------------------- controllers ---------------------- */
-// export async function createMovie(req, res) {
-//   try {
-//     const body = req.body || {};
-
-//     const posterUrl = req.files?.poster?.[0]?.filename
-//       ? getUploadUrl(req.files.poster[0].filename)
-//       : body.poster || null;
-
-//     const trailerUrl = req.files?.trailerUrl?.[0]?.filename
-//       ? getUploadUrl(req.files.trailerUrl[0].filename)
-//       : body.trailerUrl || null;
-
-//     const videoUrl = req.files?.videoUrl?.[0]?.filename
-//       ? getUploadUrl(req.files.videoUrl[0].filename)
-//       : body.videoUrl || null;
-
-//     const categories =
-//       safeParseJSON(body.categories) ||
-//       String(body.categories || "")
-//         .split(",")
-//         .map((s) => s.trim())
-//         .filter(Boolean);
-
-//     const slots = safeParseJSON(body.slots) || [];
-//     const seatPrices =
-//       safeParseJSON(body.seatPrices) || {
-//         standard: Number(body.standard || 0),
-//         recliner: Number(body.recliner || 0),
-//       };
-
-//     const cast = safeParseJSON(body.cast) || [];
-//     const directors = safeParseJSON(body.directors) || [];
-//     const producers = safeParseJSON(body.producers) || [];
-
-//     const attachFiles = (field, arr) => {
-//       if (!req.files?.[field]) return;
-//       req.files[field].forEach((file, i) => {
-//         if (!arr[i]) arr[i] = { name: "" };
-//         arr[i].file = file.filename;
-//       });
-//     };
-
-//     attachFiles("castFiles", cast);
-//     attachFiles("directorFiles", directors);
-//     attachFiles("producerFiles", producers);
-
-//     /* ---------- Latest Trailer ---------- */
-//     const latestTrailerBody = safeParseJSON(body.latestTrailer) || {};
-
-//     if (req.files?.ltThumbnail?.[0]?.filename)
-//       latestTrailerBody.thumbnail = req.files.ltThumbnail[0].filename;
-
-//     latestTrailerBody.directors = buildLatestTrailerPeople(latestTrailerBody.directors);
-//     latestTrailerBody.producers = buildLatestTrailerPeople(latestTrailerBody.producers);
-//     latestTrailerBody.singers = buildLatestTrailerPeople(latestTrailerBody.singers);
-
-//     const auditoriumValue =
-//       typeof body.auditorium === "string" && body.auditorium.trim()
-//         ? body.auditorium.trim()
-//         : "Audi 1";
-
-//     const newMovie = new Movie({
-//       _id: new mongoose.Types.ObjectId(),
-//       type: body.type || "normal",
-//       movieName: body.movieName || "",
-//       categories,
-//       poster: posterUrl,
-//       trailerUrl,
-//       videoUrl,
-//       rating: Number(body.rating) || 0,
-//       duration: Number(body.duration) || 0,
-//       slots,
-//       seatPrices,
-//       cast,
-//       directors,
-//       producers,
-//       story: body.story || "",
-//       latestTrailer: latestTrailerBody,
-//       auditorium: auditoriumValue,
-//     });
-
-//     const saved = await newMovie.save();
-//     return res.status(201).json({ success: true, data: saved });
-//   } catch (err) {
-//     console.error("createMovie error:", err);
-//     return res.status(500).json({ success: false, message: "Server error" });
-//   }
-// }
-
-// export async function getMovies(req, res) {
-//   try {
-//     const { category, type, search, latestTrailers } = req.query;
-
-//     let filter = {};
-
-//     if (category) filter.categories = { $in: [category] };
-//     if (type) filter.type = type;
-
-//     if (search) {
-//       filter.$or = [
-//         { movieName: { $regex: search, $options: "i" } },
-//         { story: { $regex: search, $options: "i" } },
-//       ];
-//     }
-
-//     if (latestTrailers) filter.type = "latestTrailers";
-
-//     const items = await Movie.find(filter).sort("-createdAt").lean();
-//     const normalized = items.map(normalizeItemForOutput);
-
-//     res.json({ success: true, items: normalized });
-//   } catch (err) {
-//     console.error("getMovies error:", err);
-//     res.status(500).json({ success: false });
-//   }
-// }
-
-// export async function getMovieById(req, res) {
-//   try {
-//     const m = await Movie.findById(req.params.id).lean();
-//     if (!m) return res.status(404).json({ success: false });
-
-//     return res.json({
-//       success: true,
-//       item: normalizeItemForOutput(m),
-//     });
-//   } catch (err) {
-//     console.error("getMovieById:", err);
-//     res.status(500).json({ success: false });
-//   }
-// }
-
-// export async function deleteMovie(req, res) {
-//   try {
-//     const m = await Movie.findById(req.params.id);
-//     if (!m) return res.status(404).json({ success: false });
-
-//     if (m.poster) tryUnlinkUploadUrl(m.poster);
-//     if (m.latestTrailer?.thumbnail) tryUnlinkUploadUrl(m.latestTrailer.thumbnail);
-
-//     [...m.cast, ...m.directors, ...m.producers].forEach((p) =>
-//       p.file && tryUnlinkUploadUrl(p.file)
-//     );
-
-//     await Movie.findByIdAndDelete(req.params.id);
-
-//     res.json({ success: true, message: "Deleted" });
-//   } catch (err) {
-//     console.error("deleteMovie:", err);
-//     res.status(500).json({ success: false });
-//   }
-// }
-
-// export default { createMovie, getMovies, getMovieById, deleteMovie };
