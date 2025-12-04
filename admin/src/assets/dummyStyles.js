@@ -147,6 +147,7 @@ export const styles2 = {
   detailContainer: "mt-3 text-sm text-gray-300 space-y-2",
   detailItem: "flex items-center gap-2",
   detailIcon: "w-4 h-4 text-red-400",
+  locationIcon: "w-4 h-4 text-red-400",
   auditoriumLabel: "text-xs text-gray-400 mr-2",
   auditoriumValue: "font-semibold text-gray-200",
   
