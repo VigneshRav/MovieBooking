@@ -131,7 +131,7 @@ export default function BookingsPage() {
           const durationMins =
             movie.durationMins ?? movie.duration ?? b.durationMins ?? 0;
           const slotTime = b.showtime || b.slotTime || b.slot || null;
-          const auditorium = b.auditorium || b.audi || "Audi 1";
+          const auditorium = b.auditorium || b.audi || "Sathyam Cinemas";
 
           // seats: normalize string/object
           const seats =
@@ -473,7 +473,7 @@ export default function BookingsPage() {
                     <strong>Time:</strong> {scannedDetails.time}
                   </div>
                   <div>
-                    <strong>Auditorium:</strong> {scannedDetails.auditorium}
+                    <strong>Theater:</strong> {scannedDetails.auditorium}
                   </div>
                   <div className="mt-2">
                     <strong>Seats:</strong>{" "}

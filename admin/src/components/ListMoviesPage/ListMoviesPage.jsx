@@ -576,9 +576,9 @@ function DetailView({ item, onClose }) {
     return gradients[type] || "from-gray-500 to-gray-600";
   };
 
-  // final auditorium to display (fallback to "Audi 1")
+  // final auditorium to display (fallback to "Sathyam Cinemas")
   const displayAuditorium =
-    item?.auditorium || item?.auditorium === "" ? item.auditorium : "Audi 1";
+    item?.auditorium || item?.auditorium === "" ? item.auditorium : "Sathyam Cinemas";
 
   return (
     <div className={styles5.detailContainer}>
@@ -671,7 +671,7 @@ function DetailView({ item, onClose }) {
               {/* NEW: Auditorium display for trailers too (if present) */}
               <div className={styles5.detailGridItem}>
                 <div className={styles5.detailGridLabel}>
-                  Auditorium
+                  Theater
                 </div>
                 <div className={styles5.detailGridValue}>
                   {displayAuditorium}

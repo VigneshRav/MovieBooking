@@ -1,7 +1,7 @@
 // src/pages/Bookings.jsx
 import React, { useMemo, useState, useEffect } from "react";
 import axios from "axios";
-import { User, Film, Clock, Ticket, X } from "lucide-react";
+import { User, Film, Clock, Ticket, X, MapPin } from "lucide-react";
 import { styles2, fontStyles } from "../../assets/dummyStyles";
 
 // helper: format date as: Tue, Oct 7, 2025 — 7:30 PM
@@ -244,7 +244,7 @@ export default function Bookings() {
           {bookingsToShow.map((b) => {
             const amount = b.amount || 0;
             const audiDisplay =
-              b.auditorium && b.auditorium.trim() ? b.auditorium : "Audi 1";
+              b.auditorium && b.auditorium.trim() ? b.auditorium : "Sathyam Cinemas";
             return (
               <article key={b.id} className={styles2.bookingCard}>
                 <div>
@@ -283,10 +283,10 @@ export default function Bookings() {
 
                     {/* NEW: auditorium display */}
                     <div className={styles2.detailItem}>
-                      <Ticket className={styles2.detailIcon} />
+                      <MapPin className={styles2.locationIcon} />
                       <div className="text-sm text-gray-300">
                         <span className={styles2.auditoriumLabel}>
-                          Auditorium:
+                          Theater:
                         </span>
                         <span className={styles2.auditoriumValue}>
                           {audiDisplay}
