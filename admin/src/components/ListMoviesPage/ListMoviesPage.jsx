@@ -743,7 +743,7 @@ function DetailView({ item, onClose }) {
                 {/* NEW: Auditorium block */}
                 <div className={styles5.detailInfoItem}>
                   <div className={styles5.detailInfoLabel}>
-                    Auditorium
+                    Theater
                   </div>
                   <div className={styles5.detailInfoValue}>
                     {displayAuditorium}
