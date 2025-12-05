@@ -1,16 +1,83 @@
-# React + Vite
+## 🎬 MovieBooking — Admin Panel
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This is the Admin Dashboard for managing the entire cinema ecosystem:
 
-Currently, two official plugins are available:
+- Movies
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Theaters
 
-## React Compiler
+- Showtimes
 
-The React Compiler is not enabled on this template. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Bookings
 
-## Expanding the ESLint configuration
+- Pricing
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- Posters (Cloudinary)
+
+---
+
+## 🚀 Tech Stack:-
+
+- React.js
+
+- TailwindCSS
+
+- Axios
+
+- React Router
+
+- Cloudinary upload widgets (optional)
+
+---
+
+## 🎯 Features:-
+
+## 🎬 Movie Management:
+
+- Add / Edit / Delete movies
+
+- Upload posters & banners
+
+- Set languages, genres, duration, description
+
+## 🏟 Theater & Screen Management:
+
+- Manage theaters
+
+- Set seat layout
+
+- Update seat pricing
+
+## 🕒 Showtimes:
+
+- Add/edit/remove showtimes
+
+- Assign movie to screen
+
+- Set date and times
+
+## 📊 Admin Dashboard:
+
+- Sales analytics
+
+- Popular movies
+
+- Booking statistics
+
+- Seat occupancy heat map (if added)
+
+## 🔐 Authentication:
+
+- Admins must login to manage dashboards.
+
+- JWT token stored in HTTP-only cookies or local storage.
+
+---
+
+## ⚙ Install & Run:-
+
+- cd admin
+
+- npm install
+
+- npm run dev
